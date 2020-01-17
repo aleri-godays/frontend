@@ -1,14 +1,13 @@
 package http
 
 import (
-	"context"
 	"fmt"
 	"github.com/aleri-godays/frontend/internal/config"
 	"github.com/dgrijalva/jwt-go"
-	"github.com/google/go-github/github"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/sirupsen/logrus"
+
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 	githuboauth "golang.org/x/oauth2/github"
@@ -43,7 +42,7 @@ func newGithubAuth(conf *config.Config) *githubAuth {
 }
 
 func (a *githubAuth) Login(c echo.Context) error {
-	url := a.oauth2Config.AuthCodeURL(a.oauthStateString, oauth2.AccessTypeOnline)
+	url := "/authcallback"
 	return c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
@@ -57,50 +56,17 @@ func (a *githubAuth) Logout(c echo.Context) error {
 }
 
 func (a *githubAuth) Callback(c echo.Context) error {
-	logger := c.Get("logger").(*log.Entry)
-
-	state := c.FormValue("state")
-	if state != a.oauthStateString {
-		logger.WithFields(logrus.Fields{
-			"expected": a.oauthStateString,
-			"got":      state,
-		}).Warn("invalid oauth state")
-		return EchoError(c, http.StatusUnauthorized, "could not process login")
-	}
-
-	code := c.FormValue("code")
-	token, err := a.oauth2Config.Exchange(context.Background(), code)
-	if err != nil {
-		logger.WithFields(logrus.Fields{
-			"code":  code,
-			"error": err,
-		}).Error("oauth exchange failed")
-		return EchoError(c, http.StatusUnauthorized, "could not process login")
-	}
-
-	oauthClient := a.oauth2Config.Client(context.Background(), token)
-	client := github.NewClient(oauthClient)
-	user, _, err := client.Users.Get(context.Background(), "")
-	if err != nil {
-		logger.WithFields(logrus.Fields{
-			"error": err,
-		}).Error("could not fetch user data from github")
-		return EchoError(c, http.StatusUnauthorized, "could not process login")
-	}
-
-	logger.WithFields(logrus.Fields{
-		"github_login": user.GetLogin(),
-	}).Debug("logged in as github user")
 
 	jwtToken := jwt.New(jwt.SigningMethodHS256)
 	claims := jwtToken.Claims.(jwt.MapClaims)
-	claims["user"] = *user.Login
+	claims["user"] = "dummy"
 	claims["exp"] = time.Now().Add(a.sessionTTL).Unix()
 
 	type Token struct {
 		Token string
 	}
 	var t Token
+	var err error
 	t.Token, err = jwtToken.SignedString([]byte(a.config.JWTSecret))
 	if err != nil {
 		return EchoError(c, http.StatusInternalServerError, "could not create jwt")
