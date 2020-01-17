@@ -1,0 +1,14 @@
+.idea
+.vscode
+
+#this dirs contain binary
+release
+
+*.log
+cover.out
+
+text.txt
+
+#web/*
+
+start.sh
